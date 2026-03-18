@@ -17,18 +17,18 @@ logging.basicConfig(
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Risponde al comando /start"""
-    await update.message.reply_text("Ciao! Usa il comando /volley per vedere gli iscritti di oggi.")
+    await update.message.reply_text("Hi! Use the /players command to see today's subscribers.")
 
-async def check_volley(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Recupera i dati dal JSON in due step e li invia su Telegram"""
-    await update.message.reply_text("Sto cercando l'evento e recuperando gli iscritti...")
+    await update.message.reply_text("I'm looking for the event and retrieving the subscribers...")
     
-    # URL di base
+    # Base URL
     base_url = "https://scub.unibz.it/api/events"
     
-    # ⚠️ SE SERVE L'AUTENTICAZIONE, SCOMMENTA QUESTE RIGHE E INSERISCI IL TUO COOKIE
+    # ⚠️ IF AUTHENTICATION IS REQUIRED, UNCOMMENT THESE LINES AND INSERT YOUR COOKIE
     # headers = {'Cookie': 'NOME_COOKIE=valore_del_cookie'} 
-    # Per ora usiamo una variabile vuota se non hai ancora i cookie
+    # For now we use an empty variable if you don't have the cookies yet
     headers = {
         'Cookie': UNIBZ_COOKIE,
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
@@ -49,7 +49,7 @@ async def check_volley(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 break # Trovato l'evento, fermiamo il ciclo!
                 
         if not event_id:
-            await update.message.reply_text("Non ho trovato nessun evento di Pallavolo programmato.")
+            await update.message.reply_text("I couldn't find any Volleyball events scheduled.")
             return
 
         # --- STEP 2: Usare l'ID per prendere i dettagli (e i nomi) ---
@@ -75,21 +75,21 @@ async def check_volley(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # --- PREPARAZIONE DEL MESSAGGIO ---
         if len(iscritti) > 0:
             messaggio = f"🏐 **Volleyball Match & Training**\n"
-            messaggio += f"ID Evento: `{event_id}`\n"
-            messaggio += f"Totale iscritti: {len(iscritti)}\n\n"
+            messaggio += f"Event ID: `{event_id}`\n"
+            messaggio += f"Total subscribers: {len(iscritti)}\n\n"
             
             for i, nome in enumerate(iscritti, 1):
                 messaggio += f"{i}. {nome}\n"
         else:
-            messaggio = "Ho trovato l'evento, ma la lista iscritti sembra vuota o non accessibile."
+            messaggio = "I found the event, but the subscriber list seems empty or inaccessible."
             
         await update.message.reply_text(messaggio, parse_mode='Markdown')
         
     except requests.exceptions.HTTPError as err:
         # Gestione specifica se il sito ci blocca (es. Errore 401 o 403)
-        await update.message.reply_text(f"⚠️ Errore di connessione al sito. Forse serve il login? Dettaglio: `{err}`", parse_mode='Markdown')
+        await update.message.reply_text(f"⚠️ Connection error to the site. Maybe login is required? Detail: `{err}`", parse_mode='Markdown')
     except Exception as e:
-        await update.message.reply_text(f"⚠️ Si è verificato un errore:\n`{e}`", parse_mode='Markdown')
+        await update.message.reply_text(f"⚠️ An error occurred:\n`{e}`", parse_mode='Markdown')
 
 # --- INIZIO FINTO SERVER WEB PER KOYEB ---
 class DummyHandler(BaseHTTPRequestHandler):
@@ -107,21 +107,21 @@ def run_dummy_server():
     # Koyeb di solito usa la porta 8000 di default
     port = int(os.environ.get("PORT", 8000))
     server = HTTPServer(('0.0.0.0', port), DummyHandler)
-    print(f"Finto server web in ascolto sulla porta {port}...")
+    print(f"Dummy server running on port {port}...")
     server.serve_forever()
-# --- FINE FINTO SERVER WEB ---
+# --- END DUMMY SERVER ---
 
 if __name__ == '__main__':
-    # 1. Avvia il finto server web in background (Daemon Thread)
+    # 1. Start the dummy web server in the background (Daemon Thread)
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
     # 2. Crea l'applicazione del bot
     app = ApplicationBuilder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("volley", check_volley))
+    app.add_handler(CommandHandler("players", get_players))
     
-    print("Bot in esecuzione! Vai su Telegram e scrivigli /start")
+    print("Bot running! Go to Telegram and write /start")
     
     # 3. Mantiene il bot in ascolto
     app.run_polling()
