@@ -1,4 +1,6 @@
 import os
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import requests
 from telegram import Update
@@ -89,15 +91,37 @@ async def check_volley(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"⚠️ Si è verificato un errore:\n`{e}`", parse_mode='Markdown')
 
+# --- INIZIO FINTO SERVER WEB PER KOYEB ---
+class DummyHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(b"Bot Telegram Attivo!")
+
+    # Nascondiamo i log del server web per non sporcare il terminale
+    def log_message(self, format, *args):
+        pass
+
+def run_dummy_server():
+    # Koyeb di solito usa la porta 8000 di default
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(('0.0.0.0', port), DummyHandler)
+    print(f"Finto server web in ascolto sulla porta {port}...")
+    server.serve_forever()
+# --- FINE FINTO SERVER WEB ---
+
 if __name__ == '__main__':
-    # Crea l'applicazione del bot
+    # 1. Avvia il finto server web in background (Daemon Thread)
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    
+    # 2. Crea l'applicazione del bot
     app = ApplicationBuilder().token(TOKEN).build()
     
-    # Associa i comandi alle funzioni
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("volley", check_volley))
     
     print("Bot in esecuzione! Vai su Telegram e scrivigli /start")
     
-    # Mantiene il bot in ascolto
+    # 3. Mantiene il bot in ascolto
     app.run_polling()
