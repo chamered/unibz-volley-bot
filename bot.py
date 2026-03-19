@@ -29,7 +29,7 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Data for login
     login_url = "https://scub.unibz.it/api/auth/login"
-    login_data = {
+    login_payload = {
         'emailOrUsername': UNIBZ_USER,
         'password': UNIBZ_PASS
     }
@@ -90,7 +90,7 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(messaggio, parse_mode='Markdown')
         
     except requests.exceptions.HTTPError as err:
-        if err.response.staus_code == 401:
+        if err.response.status_code == 401:
             await update.message.reply_text("⚠️ Login error. Please check your credentials.")
         else:
             await update.message.reply_text(f"⚠️ Connection error:\n`{err}`", parse_mode='Markdown')
