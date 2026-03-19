@@ -7,7 +7,8 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-UNIBZ_COOKIE = os.environ.get("UNIBZ_COOKIE")
+UNIBZ_USER = os.environ.get("UNIBZ_USER")
+UNIBZ_PASS = os.environ.get("UNIBZ_PASS")
 
 # Initialize logging to monitor errors and activity in the console
 logging.basicConfig(
@@ -23,17 +24,28 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Retrieves volleyball player data from the unibz API and sends it to the user."""
     await update.message.reply_text("I'm looking for the event and retrieving the subscribers...")
     
-    # Base API endpoint for unibz events
-    base_url = "https://scub.unibz.it/api/events"
-    
-    headers = {
-        'Cookie': UNIBZ_COOKIE,
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
-    } 
+    # Create a session to persist cookies
+    session = requests.Session()
+
+    # Data for login
+    login_url = "https://scub.unibz.it/api/auth/login"
+    login_data = {
+        'emailOrUsername': UNIBZ_USER,
+        'password': UNIBZ_PASS
+    }
 
     try:
+        # STEP 0: Login to the website
+        # Use login_payload because the API expects a JSON object
+        response_login = session.post(login_url, json=login_payload)
+        response_login.raise_for_status() # Check if the password is correct
+        
+        # If we are here, the login was successful
+        
         # --- STEP 1: Find the Volleyball event ID ---
-        response_list = requests.get(base_url, headers=headers)
+        base_url = "https://scub.unibz.it/api/events"
+
+        response_list = session.get(base_url)
         response_list.raise_for_status()
         data_list = response_list.json()
         
@@ -51,30 +63,26 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # --- STEP 2: Fetch detailed event information including booking names ---
         details_url = f"{base_url}/{event_id}"
-        response_details = requests.get(details_url, headers=headers)
+        response_details = session.get(details_url)
         response_details.raise_for_status()
         data_details = response_details.json()
         
-        iscritti = []
-
+        subscribers = []
         event_details = data_details.get('event', {})
         
-        # NOTE: The structure of the bookings JSON is assumed. Expecting 'bookings' 
-        # to contain a 'user' object with a 'name' field.
         for booking in event_details.get('bookings', []):
             # Get the user's name, defaulting to "Unknown Name" if missing
             nome_utente = booking.get('user', {}).get('name', 'Nome Sconosciuto')
             # Only include confirmed bookings
             if booking.get('status') == 'CONFIRMED':
-                iscritti.append(nome_utente)
+                subscribers.append(nome_utente)
         
         # --- MESSAGE PREPARATION ---
-        if len(iscritti) > 0:
+        if len(subscribers) > 0:
             messaggio = f"🏐 **Volleyball Match & Training**\n"
-            messaggio += f"Event ID: `{event_id}`\n"
-            messaggio += f"Total subscribers: {len(iscritti)}\n\n"
+            messaggio += f"Total subscribers: {len(subscribers)}\n\n"
             
-            for i, nome in enumerate(iscritti, 1):
+            for i, nome in enumerate(subscribers, 1):
                 messaggio += f"{i}. {nome}\n"
         else:
             messaggio = "I found the event, but the subscriber list seems empty or inaccessible."
@@ -82,8 +90,10 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(messaggio, parse_mode='Markdown')
         
     except requests.exceptions.HTTPError as err:
-        # Handle HTTP errors specifically (e.g., authentication failures)
-        await update.message.reply_text(f"⚠️ Connection error to the site. Maybe login is required? Detail: `{err}`", parse_mode='Markdown')
+        if err.response.staus_code == 401:
+            await update.message.reply_text("⚠️ Login error. Please check your credentials.")
+        else:
+            await update.message.reply_text(f"⚠️ Connection error:\n`{err}`", parse_mode='Markdown')
     except Exception as e:
         await update.message.reply_text(f"⚠️ An error occurred:\n`{e}`", parse_mode='Markdown')
 
