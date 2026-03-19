@@ -99,6 +99,12 @@ class DummyHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b"Bot Telegram Attivo!")
 
+    # AGGIUNGIAMO QUESTA FUNZIONE PER UPTIMEROBOT
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+
     # Nascondiamo i log del server web per non sporcare il terminale
     def log_message(self, format, *args):
         pass
