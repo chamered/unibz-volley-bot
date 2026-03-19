@@ -9,50 +9,47 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 UNIBZ_COOKIE = os.environ.get("UNIBZ_COOKIE")
 
-# Configura il logging per vedere eventuali errori nel terminale
+# Initialize logging to monitor errors and activity in the console
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Risponde al comando /start"""
+    """Handles the /start command, greeting the user."""
     await update.message.reply_text("Hi! Use the /players command to see today's subscribers.")
 
 async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Recupera i dati dal JSON in due step e li invia su Telegram"""
+    """Retrieves volleyball player data from the unibz API and sends it to the user."""
     await update.message.reply_text("I'm looking for the event and retrieving the subscribers...")
     
-    # Base URL
+    # Base API endpoint for unibz events
     base_url = "https://scub.unibz.it/api/events"
     
-    # ⚠️ IF AUTHENTICATION IS REQUIRED, UNCOMMENT THESE LINES AND INSERT YOUR COOKIE
-    # headers = {'Cookie': 'NOME_COOKIE=valore_del_cookie'} 
-    # For now we use an empty variable if you don't have the cookies yet
     headers = {
         'Cookie': UNIBZ_COOKIE,
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
     } 
 
     try:
-        # --- STEP 1: Trovare l'ID dell'evento ---
+        # --- STEP 1: Find the Volleyball event ID ---
         response_list = requests.get(base_url, headers=headers)
         response_list.raise_for_status()
         data_list = response_list.json()
         
         event_id = None
         
-        # Navighiamo la lista "events" del JSON che mi hai incollato
+        # Iterate through the events list to find the "Volleyball Match & Training" event
         for event in data_list.get('events', []):
             if "Volleyball Match & Training" in event.get('title', ''):
                 event_id = event.get('id')
-                break # Trovato l'evento, fermiamo il ciclo!
+                break # Event found, exit the loop
                 
         if not event_id:
             await update.message.reply_text("I couldn't find any Volleyball events scheduled.")
             return
 
-        # --- STEP 2: Usare l'ID per prendere i dettagli (e i nomi) ---
+        # --- STEP 2: Fetch detailed event information including booking names ---
         details_url = f"{base_url}/{event_id}"
         response_details = requests.get(details_url, headers=headers)
         response_details.raise_for_status()
@@ -62,17 +59,16 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         event_details = data_details.get('event', {})
         
-        # ATTENZIONE: Qui sto tirando a indovinare la struttura del SECONDO JSON.
-        # Immagino che dentro "bookings" ci sia un dizionario "user" con il "name".
-        # Se la struttura è diversa, dovrai aggiustare queste 3 righe.
+        # NOTE: The structure of the bookings JSON is assumed. Expecting 'bookings' 
+        # to contain a 'user' object with a 'name' field.
         for booking in event_details.get('bookings', []):
-            # Prova a prendere il nome, se non lo trova mette "Nome Sconosciuto"
+            # Get the user's name, defaulting to "Unknown Name" if missing
             nome_utente = booking.get('user', {}).get('name', 'Nome Sconosciuto')
-            # Aggiungiamo solo chi è confermato per sicurezza
+            # Only include confirmed bookings
             if booking.get('status') == 'CONFIRMED':
                 iscritti.append(nome_utente)
         
-        # --- PREPARAZIONE DEL MESSAGGIO ---
+        # --- MESSAGE PREPARATION ---
         if len(iscritti) > 0:
             messaggio = f"🏐 **Volleyball Match & Training**\n"
             messaggio += f"Event ID: `{event_id}`\n"
@@ -86,31 +82,31 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(messaggio, parse_mode='Markdown')
         
     except requests.exceptions.HTTPError as err:
-        # Gestione specifica se il sito ci blocca (es. Errore 401 o 403)
+        # Handle HTTP errors specifically (e.g., authentication failures)
         await update.message.reply_text(f"⚠️ Connection error to the site. Maybe login is required? Detail: `{err}`", parse_mode='Markdown')
     except Exception as e:
         await update.message.reply_text(f"⚠️ An error occurred:\n`{e}`", parse_mode='Markdown')
 
-# --- INIZIO FINTO SERVER WEB PER KOYEB ---
+# --- DUMMY WEB SERVER FOR HOSTING SERVICES (e.g., KOYEB) ---
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
-        self.wfile.write(b"Bot Telegram Attivo!")
+        self.wfile.write(b"Telegram Bot Active!")
 
-    # AGGIUNGIAMO QUESTA FUNZIONE PER UPTIMEROBOT
+    # Respond to HEAD requests (useful for uptime monitoring services)
     def do_HEAD(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/plain')
         self.end_headers()
 
-    # Nascondiamo i log del server web per non sporcare il terminale
+    # Disable server logging to keep the console clean
     def log_message(self, format, *args):
         pass
 
 def run_dummy_server():
-    # Koyeb di solito usa la porta 8000 di default
+    # Get port from environment variables, defaulting to 8000 (typical for Koyeb)
     port = int(os.environ.get("PORT", 8000))
     server = HTTPServer(('0.0.0.0', port), DummyHandler)
     print(f"Dummy server running on port {port}...")
@@ -121,7 +117,7 @@ if __name__ == '__main__':
     # 1. Start the dummy web server in the background (Daemon Thread)
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    # 2. Crea l'applicazione del bot
+    # 2. Build the Telegram bot application using the token
     app = ApplicationBuilder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
@@ -129,5 +125,5 @@ if __name__ == '__main__':
     
     print("Bot running! Go to Telegram and write /start")
     
-    # 3. Mantiene il bot in ascolto
+    # 3. Start polling to receive and process messages
     app.run_polling()
