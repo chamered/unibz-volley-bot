@@ -232,10 +232,6 @@ if __name__ == '__main__':
     # Ask the user if they want to play at 10:00 AM
     t_ask = datetime.time(hour=10, minute=0, second=0, tzinfo=rome_tz)
     app.job_queue.run_daily(ask_to_play, time=t_ask, days=days_to_run)
-
-    # Ask the user if they want to play at 10:00 AM (test)
-    t_ask_test = datetime.time(hour=10, minute=25, second=0, tzinfo=rome_tz)
-    app.job_queue.run_daily(ask_to_play, time=t_ask_test)
     
     # Execute the booking at 12:30:05 PM
     t_book = datetime.time(hour=12, minute=30, second=5, tzinfo=rome_tz)
