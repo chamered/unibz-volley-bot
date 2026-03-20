@@ -5,8 +5,8 @@ import pytz
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import requests
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler
 
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 UNIBZ_USER = os.environ.get("UNIBZ_USER")
@@ -118,7 +118,7 @@ async def ask_to_play(context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    await conext.bot.send_message(
+    await context.bot.send_message(
         chat_id=MY_CHAT_ID,
         text="Hey! Are you gonna play volleyball today?",
         reply_markup=reply_markup
