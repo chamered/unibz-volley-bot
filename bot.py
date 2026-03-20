@@ -19,6 +19,7 @@ TOKEN = os.environ.get("TELEGRAM_TOKEN")
 UNIBZ_USER = os.environ.get("UNIBZ_USER")
 UNIBZ_PASS = os.environ.get("UNIBZ_PASS")
 MY_CHAT_ID = os.environ.get("MY_CHAT_ID")
+UNIBZ_USER_ID = os.environ.get("UNIBZ_USER_ID")
 
 # Global flag to track if the user wants to play today
 WILLING_TO_PLAY = False
@@ -192,8 +193,9 @@ async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Step 3: Perform Booking
-        payload = {"eventId": event_id}
-        response = session.post(BOOKINGS_URL, json=payload)
+        booking_url = f"{EVENTS_URL}/{event_id}/book"
+        payload = {"userId": UNIBZ_USER_ID}
+        response = session.post(booking_url, json=payload)
         response.raise_for_status()
 
         await context.bot.send_message(
