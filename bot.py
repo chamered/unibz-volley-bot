@@ -1,5 +1,7 @@
 import os
 import threading
+import datetime
+import pytz
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import logging
 import requests
@@ -9,6 +11,10 @@ from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 UNIBZ_USER = os.environ.get("UNIBZ_USER")
 UNIBZ_PASS = os.environ.get("UNIBZ_PASS")
+MY_CHAT_ID = os.environ.get("MY_CHAT_ID")
+
+# Boolean flag to indicate if I'm willing to play
+WILLING_TO_PLAY = False
 
 # Initialize logging to monitor errors and activity in the console
 logging.basicConfig(
@@ -97,6 +103,94 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"⚠️ An error occurred:\n`{e}`", parse_mode='Markdown')
 
+# --- AUTO BOOKING SYSTEM ---
+async def ask_to_play(context: ContextTypes.DEFAULT_TYPE):
+    """Job scheduled at 10:00. Send the question with inline buttons."""
+    global WILLING_TO_PLAY
+    WILLING_TO_PLAY = False # Reset the flag
+    
+    # Create an inline keyboard with two buttons
+    keyboard = [
+        [
+            InlineKeyboardButton("Yes 🏐", callback_data="play_yes"),
+            InlineKeyboardButton("No 🛋️", callback_data="play_no")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await conext.bot.send_message(
+        chat_id=MY_CHAT_ID,
+        text="Hey! Are you gonna play volleyball today?",
+        reply_markup=reply_markup
+    )
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handles the button press from the user."""
+    global WILLING_TO_PLAY
+    query = update.callback_query
+    await query.answer() # Mandatory to tell Telegram that the button was pressed
+
+    if query.data == "play_yes":
+        WILLING_TO_PLAY = True
+        await query.edit_message_text(text="Awesome! 🏐 I'll automatically book it for you at 12:30.")
+    elif query.data == "play_no":
+        WILLING_TO_PLAY = False
+        await query.edit_message_text(text="No worries! 🛋️ Maybe next time.")
+
+async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
+    """Job scheduled at 12:30. Executes the booking if the user is willing to play."""
+    global WILLING_TO_PLAY
+
+    # If you didn't press the button, I won't book it for you
+    if not WILLING_TO_PLAY:
+        return
+
+    # Send a message to the user that we are about to book
+    await context.bot.send_message(chat_id=MY_CHAT_ID, text="It's 12:30! Booking your spot...")
+
+    session = requests.Session()
+    login_url = "https://scub.unibz.it/api/auth/login"
+    login_payload = {
+        'emailOrUsername': UNIBZ_USER,
+        'password': UNIBZ_PASS
+    }
+    
+    try:
+        # Login
+        session.post(login_url, json=login_payload).raise_for_status()
+
+        # Find event ID
+        base_url = "https://scub.unibz.it/api/events"
+        data_list = session.get(base_url).json()
+
+        event_id = None
+        for event in data_list.get('events', []):
+            if "Volleyball Match & Training" in event.get('title', ''):
+                event_id = event.get('id')
+                break
+        
+        if not event_id:
+            await context.bot.send_message(chat_id=MY_CHAT_ID, text="❌ Error: Couldn't find today's event to book.")
+            return
+        
+        booking_url = "https://scub.unibz.it/api/bookings"
+        booking_payload = {
+            "eventId": event_id,
+        }
+
+        # Make the POST request to book the event
+        response_book = session.post(booking_url, json=booking_payload)
+        response_book.raise_for_status() # Raise an exception for bad status codes (4xx or 5xx)
+
+        # Success!
+        await context.bot.send_message(chat_id=MY_CHAT_ID, text="✅ **Successfully booked!** Get ready to spike!", parse_mode='Markdown')
+    
+    except Exception as e:
+        await context.bot.send_message(chat_id=MY_CHAT_ID, text=f"⚠️ Failed to book automatically:\n`{e}`", parse_mode='Markdown')
+    finally:
+        # At the end, reset the flag
+        WILLING_TO_PLAY = False
+
 # --- DUMMY WEB SERVER FOR HOSTING SERVICES (e.g., KOYEB) ---
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -124,16 +218,30 @@ def run_dummy_server():
 # --- END DUMMY SERVER ---
 
 if __name__ == '__main__':
-    # 1. Start the dummy web server in the background (Daemon Thread)
+    # Start the dummy web server in the background (Daemon Thread)
     threading.Thread(target=run_dummy_server, daemon=True).start()
     
-    # 2. Build the Telegram bot application using the token
+    # Build the Telegram bot application using the token
     app = ApplicationBuilder().token(TOKEN).build()
+
+    # Define the timezone for scheduling
+    rome_tz = pytz.timezone('Europe/Rome')
+    # Define the days of the week when the bot should run (Monday=0, Sunday=6)
+    days_to_run = (2, 4)
     
+    # Ask the user if they want to play at 10:00 AM
+    t_ask = datetime.time(hour=10, minute=0, second=0, tzinfo=rome_tz)
+    app.job_queue.run_daily(ask_to_play, time=t_ask, days=days_to_run)
+    
+    # Execute the booking at 12:30:05 PM
+    t_book = datetime.time(hour=12, minute=30, second=5, tzinfo=rome_tz)
+    app.job_queue.run_daily(execute_booking, time=t_book, days=days_to_run)
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("players", get_players))
+    app.add_handler(CallbackQueryHandler(button_handler))
     
     print("Bot running! Go to Telegram and write /start")
     
-    # 3. Start polling to receive and process messages
+    # Start polling to receive and process messages
     app.run_polling()
