@@ -255,7 +255,7 @@ if __name__ == "__main__":
 
     # Timezone and scheduling configuration
     rome_tz = pytz.timezone("Europe/Rome")
-    days_to_run = (2, 4)  # Wednesday and Friday (0=Mon, 6=Sun)
+    days_to_run = (3, 5) # Wednesday (3) and Friday (5) in python-telegram-bot (0=Sunday)
 
     # Schedule: Ask user at 10:00
     t_ask = datetime.time(hour=10, minute=0, second=0, tzinfo=rome_tz)
