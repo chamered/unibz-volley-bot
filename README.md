@@ -1,11 +1,11 @@
 # Unibz SCUB Sports Bot
 
-A Python-based Telegram Bot designed for students of the Free University of Bozen-Bolzano (unibz). This bot interacts with the SCUB (Sports Club University Bolzano) platform to fetch event details, list subscribed players, and automatically book your spot for upcoming sports events.
+A Python-based Telegram Bot designed for students of the Free University of Bozen-Bolzano (unibz). This bot interacts with the SCUB (Sports Club University Bolzano) platform to retrieve event details, list registered players, and automatically reserve your spot for upcoming volleyball events (easily customizable for other sports).
 
 ## ✨ Features
-* **`/players` command:** Fetches the list of confirmed players for today's "Volleyball Match & Training" (easily customizable for other sports).
-* **Automated Booking System:** Sends you a Telegram message on specific days (e.g., Wed/Fri at 10:00) asking if you want to play. If you click "Yes", it automatically books your spot when the registrations open at 12:30.
-* **Auto-Login:** Uses `requests.Session()` to handle unibz authentication dynamically.
+* **`/players` command:** Fetches the list of confirmed players for today's "Volleyball Match & Training".
+* **Automated Booking System:** Sends you a Telegram message on specific days (i.e. Wed/Fri at 10:00 for Volleyball) asking if you want to play. If you click "Yes", it automatically books your spot when the registrations open at 12:30.
+* **Auto-Login:** Uses `requests.Session()` to handle authentication dynamically.
 * **Cloud-Ready:** Includes a built-in dummy HTTP server to bypass "sleep" restrictions on free hosting platforms like Koyeb.
 
 ## 🛠️ Prerequisites
