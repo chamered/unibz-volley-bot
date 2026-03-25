@@ -38,9 +38,9 @@ USERS = {}
 MY_CHAT_ID = os.environ.get("MY_CHAT_ID")
 if (MY_CHAT_ID):
     USERS[str(MY_CHAT_ID)] = {
-        "user": UNIBZ_USER,
-        "pass": UNIBZ_PASS,
-        "user_id": UNIBZ_USER_ID,
+        "user": os.environ.get("UNIBZ_USER"),
+        "pass": os.environ.get("UNIBZ_PASS"),
+        "user_id": os.environ.get("UNIBZ_USER_ID"),
         "willing": False
     }
 
@@ -48,9 +48,9 @@ if (MY_CHAT_ID):
 FRIEND_CHAT_ID = os.environ.get("FRIEND_CHAT_ID")
 if (FRIEND_CHAT_ID):
     USERS[str(FRIEND_CHAT_ID)] = {
-        "user": FRIEND_UNIBZ_USER,
-        "pass": FRIEND_UNIBZ_PASS,
-        "user_id": FRIEND_UNIBZ_USER_ID,
+        "user": os.environ.get("FRIEND_UNIBZ_USER"),
+        "pass": os.environ.get("FRIEND_UNIBZ_PASS"),
+        "user_id": os.environ.get("FRIEND_UNIBZ_USER_ID"),
         "willing": False
     }
 
@@ -210,7 +210,7 @@ async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
 
             # Step 3: Perform Booking with the specific user ID
             booking_url = f"{EVENTS_URL}/{event_id}/book"
-            payload = {"userId": user_data["id"]}
+            payload = {"userId": user_data["user_id"]}
             response = session.post(booking_url, json=payload)
             response.raise_for_status()
 
