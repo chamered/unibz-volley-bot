@@ -16,13 +16,6 @@ from telegram.ext import (
 
 # --- CONFIGURATION & CONSTANTS ---
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
-UNIBZ_USER = os.environ.get("UNIBZ_USER")
-UNIBZ_PASS = os.environ.get("UNIBZ_PASS")
-MY_CHAT_ID = os.environ.get("MY_CHAT_ID")
-UNIBZ_USER_ID = os.environ.get("UNIBZ_USER_ID")
-
-# Global flag to track if the user wants to play today
-WILLING_TO_PLAY = False
 
 # REST API Endpoints
 BASE_URL = "https://scub.unibz.it/api"
@@ -37,24 +30,44 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# --- MULTI-USER DATABASE (HARDCODED) ---
+# Create a dictionary by reading system variables
+USERS = {}
+
+# User 1 (Me)
+MY_CHAT_ID = os.environ.get("MY_CHAT_ID")
+if (MY_CHAT_ID):
+    USERS[str(MY_CHAT_ID)] = {
+        "user": UNIBZ_USER,
+        "pass": UNIBZ_PASS,
+        "user_id": UNIBZ_USER_ID,
+        "willing": False
+    }
+
+# User 2 (Friend)
+FRIEND_CHAT_ID = os.environ.get("FRIEND_CHAT_ID")
+if (FRIEND_CHAT_ID):
+    USERS[str(FRIEND_CHAT_ID)] = {
+        "user": FRIEND_UNIBZ_USER,
+        "pass": FRIEND_UNIBZ_PASS,
+        "user_id": FRIEND_UNIBZ_USER_ID,
+        "willing": False
+    }
+
 
 # --- HELPER FUNCTIONS ---
-
-def login_to_unibz(session: requests.Session) -> bool:
-    """
-    Authenticates the session with unibz credentials.
-    Returns True if successful, False otherwise.
-    """
+def login_to_unibz(session: requests.Session, username, password) -> bool:
+    """Authenticates the specific user session."""
     login_payload = {
-        "emailOrUsername": UNIBZ_USER,
-        "password": UNIBZ_PASS
+        "emailOrUsername": username,
+        "password": password
     }
     try:
         response = session.post(LOGIN_URL, json=login_payload)
         response.raise_for_status()
         return True
     except requests.exceptions.RequestException as e:
-        logger.error(f"Login failed: {e}")
+        logger.error(f"Login failed for {username}: {e}")
         return False
 
 
@@ -66,34 +79,35 @@ def find_volleyball_event(session: requests.Session) -> str:
     try:
         response = session.get(EVENTS_URL)
         response.raise_for_status()
-        data = response.json()
-
-        for event in data.get("events", []):
+        for event in response.json().get("events", []):
             if "Volleyball Match & Training" in event.get("title", ""):
                 return event.get("id")
     except requests.exceptions.RequestException as e:
         logger.error(f"Failed to fetch events: {e}")
-
     return None
 
 
 # --- BOT COMMAND HANDLERS ---
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Greets the user and provides basic instructions."""
-    await update.message.reply_text(
-        "Hi! Use the /players command to see today's subscribers."
-    )
+    if str(update.effective_chat.id) not in USERS:
+        await update.message.reply_text("⛔ Access denied. Private bot.")
+        return
+    await update.message.reply_text("Hi! Use the /players command to see today's subscribers.")
 
 
 async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Fetches and displays the list of players currently subscribed to the event."""
-    await update.message.reply_text("Retrieving the subscribers list...")
+    """Fetches and displays the list of players currently subscribed to the volleyball event."""
+    chat_id = str(update.effective_chat.id)
+    if chat_id not in USERS:
+        return
 
+    await update.message.reply_text("Retrieving the subscribers list...")
     session = requests.Session()
     try:
-        # Step 1: Login
-        if not login_to_unibz(session):
+        # Step 1: Login using the credentials of the user who called the command
+        my_creeds = USERS[chat_id]
+        if not login_to_unibz(session, my_creeds["user"], my_creeds["pass"]):
             await update.message.reply_text("⚠️ Login error. Check credentials.")
             return
 
@@ -107,10 +121,9 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         details_url = f"{EVENTS_URL}/{event_id}"
         response = session.get(details_url)
         response.raise_for_status()
-        details = response.json()
 
         subscribers = []
-        event_data = details.get("event", {})
+        event_data = response.json().get("event", {})
         for booking in event_data.get("bookings", []):
             if booking.get("status") == "CONFIRMED":
                 name = booking.get("user", {}).get("name", "Unknown Name")
@@ -133,12 +146,8 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # --- AUTO-BOOKING WORKFLOW ---
-
 async def ask_to_play(context: ContextTypes.DEFAULT_TYPE):
-    """Daily job (10:00) to ask the user if they want to play today."""
-    global WILLING_TO_PLAY
-    WILLING_TO_PLAY = False  # Reset state
-
+    """Daily job (10:00) to ask to all users if they want to play today."""
     keyboard = [
         [
             InlineKeyboardButton("Yes 🏐", callback_data="play_yes"),
@@ -147,76 +156,82 @@ async def ask_to_play(context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    await context.bot.send_message(
-        chat_id=MY_CHAT_ID,
-        text="Hey! Are you planning to play volleyball today?",
-        reply_markup=reply_markup,
-    )
+    for chat_id in USERS:
+        USERS[chat_id]["willing"] = False
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Hey! Are you planning to play volleyball today?",
+                reply_markup=reply_markup,
+            )
+        except Exception as e:
+            logger.error(f"Error sending message to {chat_id}: {e}")
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Processes the user's response to the play inquiry."""
-    global WILLING_TO_PLAY
+    chat_id = str(update.effective_chat.id)
     query = update.callback_query
+
+    if chat_id not in USERS:
+        await query.answer("⛔ Access denied.", show_alert=True)
+        return
+
     await query.answer()
 
     if query.data == "play_yes":
-        WILLING_TO_PLAY = True
-        await query.edit_message_text(
-            "Awesome! 🏐 I'll attempt to book your spot at 12:30."
-        )
+        USERS[chat_id]["willing"] = True # Change the state only for the single user
+        await query.edit_message_text("Awesome! 🏐 I'll attempt to book your spot at 12:30.")
     elif query.data == "play_no":
-        WILLING_TO_PLAY = False
+        USERS[chat_id]["willing"] = False
         await query.edit_message_text("No problem! 🛋️ Maybe next time.")
 
 
 async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
-    """Daily job (12:30) to perform the automatic booking if requested."""
-    global WILLING_TO_PLAY
+    """Daily job (12:30) to perform the automatic booking for EACH user who said yes."""
+    for chat_id, user_data in USERS.items():
+        if not user_data["willing"]:
+            continue # Skip the user if he said no
 
-    if not WILLING_TO_PLAY:
-        return
+        await context.bot.send_message(chat_id=chat_id, text="Booking window open! Processing...")
 
-    await context.bot.send_message(chat_id=MY_CHAT_ID, text="Booking window open! Processing...")
+        session = requests.Session()
+        try:
+            # Step 1: Login
+            if not login_to_unibz(session, user_data["user"], user_data["pass"]):
+                await context.bot.send_message(chat_id=chat_id, text="❌ Auto-booking failed: Login error.")
+                continue
 
-    session = requests.Session()
-    try:
-        # Step 1: Login
-        if not login_to_unibz(session):
-            await context.bot.send_message(chat_id=MY_CHAT_ID, text="❌ Auto-booking failed: Login error.")
-            return
+            # Step 2: Find Event
+            event_id = find_volleyball_event(session)
+            if not event_id:
+                await context.bot.send_message(chat_id=chat_id, text="❌ Auto-booking failed: Event not found.")
+                continue
 
-        # Step 2: Find Event
-        event_id = find_volleyball_event(session)
-        if not event_id:
-            await context.bot.send_message(chat_id=MY_CHAT_ID, text="❌ Auto-booking failed: Event not found.")
-            return
+            # Step 3: Perform Booking with the specific user ID
+            booking_url = f"{EVENTS_URL}/{event_id}/book"
+            payload = {"userId": user_data["id"]}
+            response = session.post(booking_url, json=payload)
+            response.raise_for_status()
 
-        # Step 3: Perform Booking
-        booking_url = f"{EVENTS_URL}/{event_id}/book"
-        payload = {"userId": UNIBZ_USER_ID}
-        response = session.post(booking_url, json=payload)
-        response.raise_for_status()
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="✅ **Successfully booked!** Get ready to spike!",
+                parse_mode="Markdown",
+            )
 
-        await context.bot.send_message(
-            chat_id=MY_CHAT_ID,
-            text="✅ **Successfully booked!** Get ready to spike!",
-            parse_mode="Markdown",
-        )
-
-    except Exception as e:
-        logger.error(f"Auto-booking error: {e}")
-        await context.bot.send_message(
-            chat_id=MY_CHAT_ID,
-            text=f"⚠️ Auto-booking failed:\n`{e}`",
-            parse_mode="Markdown",
-        )
-    finally:
-        WILLING_TO_PLAY = False  # Always reset after attempt
+        except Exception as e:
+            logger.error(f"Auto-booking error for {chat_id}: {e}")
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=f"⚠️ Auto-booking failed:\n`{e}`",
+                parse_mode="Markdown",
+            )
+        finally:
+            USERS[chat_id]["willing"] = False  # Reset the state for the next day
 
 
 # --- INFRASTRUCTURE: DUMMY SERVER ---
-
 class DummyHandler(BaseHTTPRequestHandler):
     """Minimal HTTP server to satisfy hosting health checks (e.g., Koyeb)."""
 
@@ -245,7 +260,6 @@ def run_dummy_server():
 
 
 # --- MAIN EXECUTION ---
-
 if __name__ == "__main__":
     # Start health check server in a background thread
     threading.Thread(target=run_dummy_server, daemon=True).start()
