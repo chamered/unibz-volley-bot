@@ -86,6 +86,22 @@ def find_volleyball_event(session: requests.Session) -> str:
         logger.error(f"Failed to fetch events: {e}")
     return None
 
+def extract_surname(email):
+    """
+    Extracts the surname from the local part of an email.
+    Supported formats: 'nsurname@unibz.it' or 'name.surname@student.unibz.it'.
+    """
+    # Isolate the part before the @
+    local_part = email.split("@")[0]
+    
+    # If there is a dot, take what follows the dot.
+    # If there is no dot, take everything except the first character.
+    if "." in local_part:
+        surname = local_part.split(".")[1]
+    else:
+        surname = local_part[1:]
+    
+    return surname.capitalize()
 
 # --- BOT COMMAND HANDLERS ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -126,8 +142,16 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         event_data = response.json().get("event", {})
         for booking in event_data.get("bookings", []):
             if booking.get("status") == "CONFIRMED":
-                name = booking.get("user", {}).get("name", "Unknown Name")
-                subscribers.append(name)
+                name = booking.get("user", {}).get("name", "Unknown")
+                email = booking.get("user", {}).get("email", "")
+                
+                # If the email exists and has an @, extract the surname
+                if email and "@" in email:
+                    surname = extract_surname(email)
+                    subscribers.append(f"{name} {surname}")
+                else:
+                    # Otherwise save only the name
+                    subscribers.append(name)
 
         # Step 4: Format and send the response
         if subscribers:
