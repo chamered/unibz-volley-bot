@@ -261,19 +261,26 @@ class DummyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_response(200)
-        self.send_header("Content-type", "text/plain")
+        self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
-        self.wfile.write(b"Telegram Bot Active!")
+        
+        # Try to read the index.html file
+        try:
+            with open("index.html", "r", encoding="utf-8") as file:
+                html_content = file.read()
+            self.wfile.write(html_content.encode('utf-8'))
+        except FileNotFoundError:
+            # If for some reason the file is missing, it doesn't crash but shows basic text
+            self.wfile.write(b"<h1>Telegram Bot Active (but index.html not found!)</h1>")
 
     def do_HEAD(self):
         self.send_response(200)
-        self.send_header("Content-type", "text/plain")
+        self.send_header("Content-type", "text/html; charset=utf-8")
         self.end_headers()
 
     def log_message(self, format, *args):
         # Suppress logging to keep output clean
         pass
-
 
 def run_dummy_server():
     """Starts the dummy server on the port defined by environment variables."""
