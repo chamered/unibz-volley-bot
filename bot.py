@@ -155,14 +155,14 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Step 4: Format and send the response
         if subscribers:
-            message = "🏐 **Volleyball Match & Training**\n"
-            message += f"Total subscribers: {len(subscribers)}\n\n"
+            message = "🏐 <b>Volleyball Match & Training</b>\n"
+            message += f"👥 Total subscribers: {len(subscribers)}\n\n"
             for i, name in enumerate(subscribers, 1):
                 message += f"{i}. {name}\n"
         else:
             message = "No subscribers found for this event."
 
-        await update.message.reply_text(message, parse_mode="Markdown")
+        await update.message.reply_text(message, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error in get_players: {e}")
@@ -213,6 +213,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
     """Daily job (12:30) to perform the automatic booking for EACH user who said yes."""
+    fallback_url = "https://scub.unibz.it/events"
+    keyboard = [[InlineKeyboardButton("🔗 Book manually", url=fallback_url)]]
+    fallback_markup = InlineKeyboardMarkup(keyboard)
+
     for chat_id, user_data in USERS.items():
         if not user_data["willing"]:
             continue # Skip the user if he said no
@@ -223,13 +227,21 @@ async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
         try:
             # Step 1: Login
             if not login_to_unibz(session, user_data["user"], user_data["pass"]):
-                await context.bot.send_message(chat_id=chat_id, text="❌ Auto-booking failed: Login error.")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ Auto-booking failed: Login error.",
+                    reply_markup=fallback_markup
+                )
                 continue
 
             # Step 2: Find Event
             event_id = find_volleyball_event(session)
             if not event_id:
-                await context.bot.send_message(chat_id=chat_id, text="❌ Auto-booking failed: Event not found.")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="❌ Auto-booking failed: Event not found.",
+                    reply_markup=fallback_markup
+                )
                 continue
 
             # Step 3: Perform Booking with the specific user ID
@@ -240,8 +252,8 @@ async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
 
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="✅ **Successfully booked!** Get ready to spike!",
-                parse_mode="Markdown",
+                text="✅ <b>Successfully booked!</b> Get ready to spike!",
+                parse_mode="HTML",
             )
 
         except Exception as e:
@@ -250,6 +262,7 @@ async def execute_booking(context: ContextTypes.DEFAULT_TYPE):
                 chat_id=chat_id,
                 text=f"⚠️ Auto-booking failed:\n`{e}`",
                 parse_mode="Markdown",
+                reply_markup=fallback_markup
             )
         finally:
             USERS[chat_id]["willing"] = False  # Reset the state for the next day
