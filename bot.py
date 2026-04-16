@@ -168,6 +168,62 @@ async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Error in get_players: {e}")
         await update.message.reply_text(f"⚠️ An error occurred:\n`{e}`", parse_mode="Markdown")
 
+async def force_book(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Execute instant booking for the user who sends the command."""
+    chat_id = str(update.effective_chat.id)
+    
+    # --- SECURITY CHECK ---
+    if chat_id not in USERS:
+        await update.message.reply_text("⛔ Access denied. Private bot.")
+        return
+
+    # Get the specific credentials of the user who sent the command
+    user_data = USERS[chat_id]
+    
+    # Create the button for Plan B
+    fallback_url = "https://scub.unibz.it/events"
+    keyboard = [[InlineKeyboardButton("🔗 Book manually", url=fallback_url)]]
+    fallback_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text("🔄 Starting manual booking procedure...")
+
+    session = requests.Session()
+    try:
+        # Step 1: Login
+        if not login_to_unibz(session, user_data["user"], user_data["pass"]):
+            await update.message.reply_text(
+                "❌ Auto-booking failed: Login error.",
+                reply_markup=fallback_markup
+            )
+            return
+
+        # Step 2: Find Event
+        event_id = find_volleyball_event(session)
+        if not event_id:
+            await update.message.reply_text(
+                "❌ Auto-booking failed: No event found for today.",
+                reply_markup=fallback_markup
+            )
+            return
+
+        # Step 3: Execute Booking
+        booking_url = f"{EVENTS_URL}/{event_id}/book"
+        payload = {"userId": user_data["user_id"]}
+        response = session.post(booking_url, json=payload)
+        response.raise_for_status()
+
+        await update.message.reply_text(
+            "✅ <b>Successfully booked!</b> See you on the court!",
+            parse_mode="HTML"
+        )
+
+    except Exception as e:
+        logger.error(f"Manual booking error for {chat_id}: {e}")
+        await update.message.reply_text(
+            f"⚠️ Auto-booking failed:\n<code>{e}</code>\n(Maybe you are already registered or the registration is closed?)",
+            parse_mode="HTML",
+            reply_markup=fallback_markup
+        )
 
 # --- AUTO-BOOKING WORKFLOW ---
 async def ask_to_play(context: ContextTypes.DEFAULT_TYPE):
@@ -326,6 +382,7 @@ if __name__ == "__main__":
     # Register Handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("players", get_players))
+    app.add_handler(CommandHandler("book", force_book))
     app.add_handler(CallbackQueryHandler(button_handler))
 
     logger.info("Bot is starting... Check Telegram for interaction.")
