@@ -1,5 +1,10 @@
 # 🏐 Unibz Volley Bot
 
+> [!WARNING]
+> ## ⚠️ DEPRECATED
+> **This bot is no longer functional and this repository is deprecated.**
+> The Free University of Bozen-Bolzano (unibz) SCUB website/platform has been updated, breaking the endpoints and authentication mechanisms used by this project. The code is preserved here for archival and educational purposes only.
+
 A Python-based Telegram Bot designed for students of the Free University of Bozen-Bolzano (unibz). This bot interacts with the SCUB (Sports Club University Bolzano) platform to retrieve event details, list registered players, and automatically reserve your spot for upcoming volleyball events (easily customizable for other sports).
 
 ## ✨ Features

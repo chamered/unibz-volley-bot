@@ -1,3 +1,9 @@
+"""
+⚠️ DEPRECATED
+This bot is no longer functional because the unibz SCUB platform has changed.
+Preserved for educational and archival purposes only.
+"""
+
 import datetime
 import logging
 import os
@@ -109,7 +115,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(update.effective_chat.id) not in USERS:
         await update.message.reply_text("⛔ Access denied. Private bot.")
         return
-    await update.message.reply_text("Hi! Use the /players command to see today's subscribers.")
+    await update.message.reply_text("⚠️ Deprecation notice: The unibz SCUB website has changed and this bot is no longer functional.\n\nHi! Use the /players command to see today's subscribers.")
 
 
 async def get_players(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -385,5 +391,6 @@ if __name__ == "__main__":
     app.add_handler(CommandHandler("book", force_book))
     app.add_handler(CallbackQueryHandler(button_handler))
 
+    logger.warning("DEPRECATION NOTICE: unibz SCUB platform has changed, this bot is no longer functional.")
     logger.info("Bot is starting... Check Telegram for interaction.")
     app.run_polling()
